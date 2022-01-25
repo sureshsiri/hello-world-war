@@ -1,0 +1,66 @@
+pipeline {
+    agent {
+  label 'suresh_Node'
+}
+    environment {
+  PATH = "/opt/maven/bin:$PATH"
+}
+parameters {
+  choice choices: ['dev', 'main', 'stg', 'master'], description: 'please selct the branch', name: 'branch'
+}
+
+
+    stages {
+        stage('Hello') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+        stage('checkout'){
+            steps{
+                checkout([$class: 'GitSCM', 
+                branches: 
+                [
+                    [name: "*/${branch}"]]   ,
+                 extensions: 
+                 [], userRemoteConfigs: 
+                 [[credentialsId: 'mygithub', 
+                 url: 'https://github.com/sureshsiri/jenkins-practice.git']]])
+            }
+        }
+        stage('build'){
+            steps {
+                sh 'mvn package'
+            }
+        }
+        stage('nexus artifactory upload'){
+            steps {
+                script {
+                    def mavenpom = readMavenPom file: 'pom.xml'
+                nexusArtifactUploader artifacts: 
+                [
+                    [artifactId: 'hello-world-war', 
+                    classifier: '', 
+                    file: "target/hello-world-war-${mavenpom.version}.war",
+                    type: 'war']
+                    ], 
+                    credentialsId: 'srueshnexus_cred', 
+                    groupId: 'com.efsavage', 
+                    nexusUrl: '3.109.207.187:8081', 
+                    nexusVersion: 'nexus3', 
+                    protocol: 'http', 
+                    repository: 'pipelinerepo', 
+                    version: "${mavenpom.version}"
+                }
+            }
+        }
+      stage('Deploy'){
+        steps {
+          deploy adapters: [tomcat8(credentialsId: 'sureshtomcat_cred', path: '', 
+          url: 'http://52.66.214.170:9090/')], contextPath: 'test', war: '**/*.war'
+        }
+      }
+    }
+
+    
+}
